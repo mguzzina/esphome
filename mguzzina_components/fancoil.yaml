@@ -52,10 +52,17 @@ sensor:
     on_clockwise:
       - lambda: |
           auto& temp = id(climate_controller).target_temperature;
+          const auto& traits = id(climate_controller).get_traits();
+
+          auto& mode = id(climate_controller).mode;
+          if (CLIMATE_MODE_OFF == mode) {
+            mode = CLIMATE_MODE_HEAT;
+            return;
+          }
+
           auto intTemp = static_cast<size_t>(temp * 10.F);
           intTemp += 1;
 
-          const auto& traits = id(climate_controller).get_traits();
           temp = std::clamp(static_cast<float>(intTemp) / 10.F, traits.get_visual_min_temperature(), traits.get_visual_max_temperature());
       - logger.log:
           format: "Temp: %f"
@@ -63,10 +70,16 @@ sensor:
     on_anticlockwise:
       - lambda: |
           auto& temp = id(climate_controller).target_temperature;
+          const auto& traits = id(climate_controller).get_traits();
+
+          if (traits.get_visual_min_temperature() == temp) {
+            id(climate_controller).mode = CLIMATE_MODE_OFF;
+            return;
+          }
+
           auto intTemp = static_cast<size_t>(temp * 10.F);
           intTemp -= 1;
 
-          const auto& traits = id(climate_controller).get_traits();
           temp = std::clamp(static_cast<float>(intTemp) / 10.F, traits.get_visual_min_temperature(), traits.get_visual_max_temperature());
       - logger.log:
           format: "Temp: %f"
@@ -122,14 +135,19 @@ display:
       if (climate->target_temperature != set_temp) {
         iterations = 0;
       } else if (iterations >= 20) {
-        it.print("");
+        return;
+      }
+
+      auto intTemp = static_cast<size_t>(std::round(set_temp * 10));
+      set_temp = climate->target_temperature;
+      ++iterations;
+
+      if (CLIMATE_MODE_OFF == climate->mode) {
+        it.print(" OFF");
         return;
       }
 
       char temp[6] = "00.0C";
-
-      auto intTemp = static_cast<size_t>(std::round(set_temp * 10));
-
       temp[3] = '0' + (intTemp % 10);
       intTemp /= 10;
 
@@ -139,5 +157,3 @@ display:
       temp[0] = '0' + (intTemp % 10);
 
       it.print(temp);
-      ++iterations;
-      set_temp = climate->target_temperature;
